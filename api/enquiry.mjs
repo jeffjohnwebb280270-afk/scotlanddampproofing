@@ -73,6 +73,9 @@ export default async function handler(req, res, deps = {}) {
     return json(res, 400, { error: result.errors.join('; '), fields: result.errors });
   }
   const { lead } = result;
+  if (lead.postcodeLooksOdd) {
+    console.warn(`[enquiry] POSTCODE_ODD "${lead.postcode}" accepted anyway — a mistyped postcode is still a lead`);
+  }
 
   /* ---- 3. Durable capture, before any delivery attempt. ---------------- */
   console.error(leadRecord(lead, { receivedAt, requestId }));

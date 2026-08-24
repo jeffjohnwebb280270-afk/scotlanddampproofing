@@ -157,9 +157,23 @@ describe('validateEnquiry', () => {
     assert.match(r.errors.join(' '), /email is not a valid address/);
   });
 
-  test('rejects a postcode that is not UK-shaped', () => {
+  test('an odd postcode is ACCEPTED and flagged, never rejected', () => {
     const r = validateEnquiry({ ...VALID, postcode: '90210' });
-    assert.match(r.errors.join(' '), /UK postcode/);
+    assert.equal(r.ok, true, 'a mistyped postcode must not cost a lead');
+    assert.equal(r.lead.postcodeLooksOdd, true);
+  });
+
+  test('a normal Scottish postcode is not flagged', () => {
+    for (const pc of ['G41 7RY', 'EH1 1YZ', 'AB10 1XG', 'IV1 1AA', 'KW1 4YT']) {
+      assert.equal(validateEnquiry({ ...VALID, postcode: pc }).lead.postcodeLooksOdd, false, pc);
+    }
+  });
+
+  test('an odd postcode is flagged in the notification, both parts', () => {
+    const odd = validateEnquiry({ ...VALID, postcode: '90210' }).lead;
+    const m = buildNotificationEmail(odd, CONFIG);
+    assert.match(m.html, /not a standard UK format/);
+    assert.match(m.text, /not a standard UK format/);
   });
 
   test('truncates an overlong name rather than rejecting it', () => {
@@ -706,6 +720,15 @@ describe('POST /api/enquiry', () => {
     const sent = logs.find((l) => l.msg.includes('SENT'));
     assert.match(sent.msg, /priority=true/);
     assert.match(sent.msg, /attempts=1/);
+  });
+
+  test('an odd postcode is accepted, logged, and still delivered', async () => {
+    const res = mockRes();
+    await handler(mockReq({ ...VALID, postcode: '90210' }), res, {
+      env: GOOD_ENV, transporter: fakeTransport([{ messageId: '<m>' }]),
+    });
+    assert.equal(res.statusCode, 200, 'a mistyped postcode must not cost a lead');
+    assert.ok(logs.some((l) => l.msg.includes('POSTCODE_ODD')));
   });
 
   test('the response is JSON', async () => {
